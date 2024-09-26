@@ -16,23 +16,6 @@ def getScreenSize():
     return user32.GetSystemMetrics(78), user32.GetSystemMetrics(79)
 
 
-# def detectBoard(img, top=0, left=0) -> tuple[(int, int), (int, int)]:
-#     scr = img
-#     # img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-#     _, thresh = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-#     img = cv2.bitwise_not(thresh)
-
-#     lines = cv2.HoughLinesP(img, 1, np.pi / 180, 10, None, 300, 5)
-#     a, _, b = lines.shape
-#     lines = lines.reshape((a * 2, b // 2))
-#     x1, y1 = lines.min(0)
-#     x2, y2 = lines.max(0)
-#     cv2.rectangle(scr, (x1, y1), (x2, y2), (0, 0, 255), 2)
-#     cv2.imshow('img', scr)
-#     return x1 + left, y1 + top, x2 + left, y2 + top
-
-
 def contourDistance(contour1, contour2):
     x1, y1, w1, h1 = cv2.boundingRect(contour1)
     x2, y2, w2, h2 = cv2.boundingRect(contour2)
