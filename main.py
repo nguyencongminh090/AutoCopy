@@ -68,8 +68,9 @@ class Main(ttk.Window):
         try:
             self.__x1, self.__y1, self.__w, self.__h = detectBoard(self.__img, self.__top, self.__left)        
             self.__boardState = True
-        except:
+        except Exception as e:
             self.__toast.show_toast()
+            print(e)
 
     def start(self):
         if self.__boardState:
@@ -92,7 +93,6 @@ class Main(ttk.Window):
         self.__img = imgCrop(self.__left, 
                              self.__top, 
                              *self.__img.shape[:2])
-        cv2.imshow('Test', self.__img)
 
             
 def main():

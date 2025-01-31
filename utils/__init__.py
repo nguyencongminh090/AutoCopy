@@ -8,8 +8,9 @@ import cv2
 import tkinter as tk
 from PIL import Image, ImageTk
 import win32api, win32con
+from sklearn.cluster import DBSCAN
+from scipy.spatial import KDTree
 from DetectModule import detectBoard, detectCircle
-
 
 def getScreenSize():
     user32 = ctypes.windll.user32
@@ -34,33 +35,71 @@ def contourDistance(contour1, contour2):
         return centerDistance
 
 
+class UnionFind:
+    def __init__(self, size):
+        self.parent = list(range(size))
+    
+    def find(self, u):
+        while self.parent[u] != u:
+            self.parent[u] = self.parent[self.parent[u]]
+            u = self.parent[u]
+        return u
+    
+    def union(self, u, v):
+        root_u = self.find(u)
+        root_v = self.find(v)
+        if root_u != root_v:
+            self.parent[root_v] = root_u
+
+
 def groupOverlappingContours(contours, distanceThreshold=10, areaSize=300):
-    groupedContours = []
-    remainingContours = contours[:] 
-
-    while remainingContours:
-        currentContour = remainingContours.pop(0)
-
-        if cv2.contourArea(currentContour) < areaSize:
-            continue
-
-        group = [currentContour]
-        indicesToRemove = []  
-
-        for i, contour in enumerate(remainingContours):
-            if cv2.contourArea(contour) < areaSize:
+    significant_contours = [cnt for cnt in contours if cv2.contourArea(cnt) >= areaSize]
+    if not significant_contours:
+        return []
+    
+    bounding_rects = [cv2.boundingRect(cnt) for cnt in significant_contours]
+    masks = []
+    for rect, cnt in zip(bounding_rects, significant_contours):
+        mask = np.zeros((rect[3], rect[2]), dtype=np.uint8)
+        shifted_cnt = cnt.copy()
+        shifted_cnt[:, :, 0] -= rect[0]
+        shifted_cnt[:, :, 1] -= rect[1]
+        cv2.drawContours(mask, [shifted_cnt], -1, 255, thickness=cv2.FILLED)
+        masks.append(mask)
+    
+    uf = UnionFind(len(significant_contours))
+    
+    for i in range(len(significant_contours)):
+        for j in range(i + 1, len(significant_contours)):
+            if uf.find(i) == uf.find(j):
                 continue
-            if contourDistance(contour, currentContour) <= distanceThreshold:
-                group.append(contour)
-                indicesToRemove.append(i) 
+            rect1 = bounding_rects[i]
+            rect2 = bounding_rects[j]
+            
+            x_overlap = max(0, min(rect1[0] + rect1[2], rect2[0] + rect2[2]) - max(rect1[0], rect2[0]))
+            y_overlap = max(0, min(rect1[1] + rect1[3], rect2[1] + rect2[3]) - max(rect1[1], rect2[1]))
+            
+            if x_overlap > 0 and y_overlap > 0:
+                overlap_area = x_overlap * y_overlap
+                if overlap_area > 0:
+                    uf.union(i, j)
+            else:
+                center1 = np.array([rect1[0] + rect1[2] / 2, rect1[1] + rect1[3] / 2])
+                center2 = np.array([rect2[0] + rect2[2] / 2, rect2[1] + rect2[3] / 2])
+                distance = np.linalg.norm(center1 - center2)
+                if distance <= distanceThreshold:
+                    uf.union(i, j)
+    
+    groups = {}
+    for idx in range(len(significant_contours)):
+        root = uf.find(idx)
+        if root not in groups:
+            groups[root] = []
+        groups[root].append(significant_contours[idx])
+    
+    grouped_contours = [np.vstack(group) for group in groups.values()]
+    return grouped_contours
 
-        for index in sorted(indicesToRemove, reverse=True):
-            del remainingContours[index]
-
-        groupedContour = np.concatenate(group) 
-        groupedContours.append(groupedContour)
-
-    return groupedContours
 
 
 def isInside(coord, rect):
@@ -205,7 +244,6 @@ class ScreenCapture(tk.Toplevel):
 
     def __screenshot(self, x1, y1, x2, y2):        
         self.__img = self.__img[y1:y2, x1:x2]
-        cv2.imwrite('img.png', self.__img)
         self.destroy()
 
     def get(self):
@@ -227,8 +265,6 @@ class Board:
         win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
 
         time.sleep(0.05)
-        # win32api.mouse_event(win32con.MOUSEEVENTF_LEFTDOWN, 0, 0)
-        # win32api.mouse_event(win32con.MOUSEEVENTF_LEFTUP, 0, 0)
 
     def __move2Coord(self, x, y):
         return self.__x1 + round(x * self.__disX), (self.__y1 + round(y * self.__disY))
@@ -273,4 +309,4 @@ class ArrangedArr:
             self.__wIndex += 2
 
     def get(self):
-        return self.__data
+            return self.__data
